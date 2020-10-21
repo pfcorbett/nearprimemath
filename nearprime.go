@@ -94,8 +94,6 @@ func main() {
 		t.Sub(t, one)
 	}
 
-	const workerthreads = 4     // Number of worker threads to start
-	const workerchunk = 1000000 // Number of times x will be incremented per thread per chunk
 	// Now loop, increasing the value of y each time, usually by two steps
 	for {
 		r := t.Sign()
