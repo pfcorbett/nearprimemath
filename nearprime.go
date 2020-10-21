@@ -48,6 +48,7 @@ func main() {
 	// We can also avoid computing the squares by simply adding in the correct value of x2delta and y2delta, which are the increments of the sequence of squares, i
 	// and themselves are a simple arithmatic sequence, and then updating those values.  At the end, we directly compute x and y from x2delta and y2delta respectively.
 	// Then we compute the factors simply as x+y and x-y.
+	//
 	// The complexity of this algorithm as a function of the size of the target is linear over the range of y values checked, since each loop iteration is effectively incrementing y by either
 	// 1 or 2 (depending on whether x is also incremented in that loop iteration or not).
 	// To calculate a bound on runtime, first let the ratio of the two factors be k.  Since in practice the two factors are of the same order of magnitude (same number of digits)
@@ -93,7 +94,7 @@ func main() {
 		t.Sub(t, one)
 	}
 
-	const workerthreads = 4 // Number of worker threads to start
+	const workerthreads = 4     // Number of worker threads to start
 	const workerchunk = 1000000 // Number of times x will be incremented per thread per chunk
 	// Now loop, increasing the value of y each time, usually by two steps
 	for {
