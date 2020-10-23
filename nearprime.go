@@ -20,8 +20,7 @@ func main() {
 	sqrt.Sqrt(np)
 
 	sq.Mul(&sqrt, &sqrt)
-	r := sq.Cmp(np)
-	switch r {
+	switch sq.Cmp(np) {
 	case -1:
 		// sqrt is a floor function, convert result to ceiling
 		sqrt.Add(&sqrt, big.NewInt(1))
@@ -45,7 +44,7 @@ func main() {
 	// (x+1)^^2 - x^^2 - ((y+1)^^2 - y^^2) = 2x - 2y > 0
 	// since x is always greater than y.  For large targets, x is much greater than y.  We otherwise can increment y by two until we undershoot the target number
 	// or hit it exactly when we find the factors.  We don't actually need to compute the factors until we have x^^2 - y^^2 == np.
-	// We can also avoid computing the squares by simply adding in the correct value of x2delta and y2delta, which are the increments of the sequence of squares, i
+	// We can also avoid computing the squares by simply adding in the correct value of x2delta and y2delta, which are the increments of the sequence of squares,
 	// and themselves are a simple arithmatic sequence, and then updating those values.  At the end, we directly compute x and y from x2delta and y2delta respectively.
 	// Then we compute the factors simply as x+y and x-y.
 	//
@@ -67,7 +66,7 @@ func main() {
 	// Of course, if the factors are allowed to differ more widely, the runtime will increase as a function of
 	// the actual ratio k of the two factors.  For widely differing factors, sieve techniques could discover the factors more quickly as they favor imbalanced factors.
 	// E.g. for odd factors, the worst case for this algorithm
-	// is O(N) iterations, as the resulting factors are N/3 and 3, which take N/3-N^^(1/2) + (N^^(1/2)-3)/2 ~= N/3 iterations to discover.
+	// is O(N) iterations, as the resulting factors are N/3 and 3, which take N/3-N^^(1/2) + (N^^(1/2)-3)/2 ~= N/3 iterations to discover using this approach.
 	//
 
 	fmt.Println("Near square root:", &sqrt)
@@ -96,8 +95,7 @@ func main() {
 
 	// Now loop, increasing the value of y each time, usually by two steps
 	for {
-		r := t.Sign()
-		switch r {
+		switch t.Sign() {
 		case 1:
 			// Normal case, need to increase y squared to (y+2)^^2
 			t.Sub(t.Sub(t.Sub(t, &y2delta), &y2delta), two)
