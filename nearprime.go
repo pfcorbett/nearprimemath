@@ -3,9 +3,13 @@ package main
 import (
 	"fmt"
 	"math/big"
+	//"sync"
 )
 
 // Find the factors of a large near prime number.
+const workchunksize = 1000000
+const numworkers = 1
+
 func main() {
 	// First initialize np to the value of the target near prime.  The largest of these is the RSA100 number.
 	np := new(big.Int)
@@ -16,22 +20,23 @@ func main() {
 	//np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
 
 	// Now find the smallest value x such that x squared is greater than the near prime.
-	var sq, sqrt big.Int
-	sqrt.Sqrt(np)
+	var sq, x big.Int
+	fmt.Println("Near Prime:", np)
+	x.Sqrt(np)
 
-	sq.Mul(&sqrt, &sqrt)
+	sq.Mul(&x, &x)
 	switch sq.Cmp(np) {
 	case -1:
 		// sqrt is a floor function, convert result to ceiling
-		sqrt.Add(&sqrt, big.NewInt(1))
-		sq.Mul(&sqrt, &sqrt)
+		x.Add(&x, big.NewInt(1))
+		sq.Mul(&x, &x)
 	case 0:
 		// Unlikely, but the near prime is a perfect square
-		fmt.Println("First  factor:", &sqrt)
-		fmt.Println("Second factor:", &sqrt)
+		fmt.Println("First  factor:", &x)
+		fmt.Println("Second factor:", &x)
 		return
 	case 1:
-		break
+		panic("Should not be positive")
 	}
 
 	// At this point, we are going to look for the two distinct factors of the target np (near prime number).  We know this number has two distinct factors.
@@ -69,59 +74,87 @@ func main() {
 	// is O(N) iterations, as the resulting factors are N/3 and 3, which take N/3-N^^(1/2) + (N^^(1/2)-3)/2 ~= N/3 iterations to discover using this approach.
 	//
 
-	fmt.Println("Near square root:", &sqrt)
-	fmt.Println("Near Prime:", np)
-	fmt.Printf("Near Prime: %x\n", np)
-	var x2delta, y2delta big.Int
+	inx := make(chan big.Int, numworkers)
+	outdone := make(chan struct{})
+
+	bigincr := big.NewInt(workchunksize)
+
+	for i := 0; i < numworkers; i++ {
+		go npworker(np, workchunksize, inx, outdone)
+	}
+
+	worktodo := true
+	go func() {
+		<-outdone
+		worktodo = false
+	}()
+
+	six := big.NewInt(6)
+	var t big.Int
+	for worktodo {
+		if np.Cmp(t.Mul(&x, six)) < 0 {
+			break
+		}
+		var y big.Int
+		y.Set(&x)
+		inx <- y
+		x.Add(&x, bigincr)
+	}
+	close(inx)
+}
+
+func npworker(np *big.Int, workchunk uint64, inx <-chan big.Int, outdone chan<- struct{}) {
 	one := big.NewInt(1)
 	two := big.NewInt(2)
 	four := big.NewInt(4)
-	x2delta.Add(x2delta.Add(one, &sqrt), &sqrt)
 
-	t := new(big.Int)
+	for x := range inx {
+		var t, y, x2delta, y2delta big.Int
 
-	// x could be either even or odd.  Set y accordingly to be 1 (first odd square) or 4 (first non-zero even square) since we need an EO or OE combination of x and y
-	// We don't need to check for y == 0 case, since we caught all cases of the target being a perfect square above.
-	t.Sub(&sq, np)
-	if sqrt.Bit(0) == 1 {
-		// x is odd, so make y even
-		y2delta.SetInt64(5) // We will bump y2 by 5 to get from 4 to 9
-		t.Sub(t, four)
-	} else {
-		// x is even, so make y odd to start
-		y2delta.SetInt64(3)
-		t.Sub(t, one)
-	}
+		t.Mul(&x, &x)
+		t.Sub(&t, np)
+		y.Sqrt(&t) // Floor of square root of difference x squared - N
 
-	// Now loop, increasing the value of y each time, usually by two steps
-	for {
-		switch t.Sign() {
-		case 1:
-			// Normal case, need to increase y squared to (y+2)^^2
-			t.Sub(t.Sub(t.Sub(t, &y2delta), &y2delta), two)
-			y2delta.Add(&y2delta, four)
-		case -1:
-			// Next most common, we overshot so bump x to next square, bump y one step to keep EO or OE in line and continue loop
-			x2delta.Add(&x2delta, two)
-			y2delta.Add(&y2delta, two)
-			t.Add(t, &x2delta)
-			t.Sub(t, &y2delta)
-		case 0:
-			// Eureka!!  we found the factors
-			var f1, f2 big.Int
-			x2delta.Sub(&x2delta, one)
-			x2delta.Rsh(&x2delta, 1)
-			y2delta.Sub(&y2delta, one)
-			y2delta.Rsh(&y2delta, 1)
-			f1.Sub(&x2delta, &y2delta)
-			f2.Add(&x2delta, &y2delta)
-			fmt.Println("First  factor is:", &f1)
-			fmt.Printf("f1 = %x\n", &f1)
-			fmt.Println("Second factor is:", &f2)
-			fmt.Printf("f2 = %x\n", &f2)
-			fmt.Println("Verifier =:", f1.Mul(&f1, &f2))
-			fmt.Printf("Verifier = %x\n", &f1)
-			return
+		if x.Bit(0) == 1 {
+			y.SetBit(&y, 0, 0)
+		} else {
+			y.SetBit(&y, 0, 1)
+		}
+
+		x2delta.Add(&x, x2delta.Add(&x, one))
+		y2delta.Add(&y, y2delta.Add(&y, one))
+		y.Mul(&y, &y)
+		t.Sub(&t, &y)
+
+		var i uint64
+		for i = 0; i < workchunk; i++ {
+			switch t.Sign() {
+			case 1:
+				// Normal case, need to increase y squared to (y+2) squared
+				t.Sub(t.Sub(t.Sub(&t, &y2delta), &y2delta), two)
+				y2delta.Add(&y2delta, four)
+			case -1:
+				// Second most common case, increment both x and y by 1, preserving EO or OE relationship between them
+				x2delta.Add(&x2delta, two)
+				y2delta.Add(&y2delta, two)
+				t.Add(&t, &x2delta)
+				t.Sub(&t, &y2delta)
+			case 0:
+				// Eureka, we found the factors.  Reconstruct x and y, then contruct f1 and f2
+				var f1, f2 big.Int
+				x2delta.Sub(&x2delta, one)
+				x2delta.Rsh(&x2delta, 1)
+				y2delta.Sub(&y2delta, one)
+				y2delta.Rsh(&y2delta, 1)
+				f1.Sub(&x2delta, &y2delta)
+				f2.Add(&x2delta, &y2delta)
+				fmt.Println("First factor is:", &f1)
+				fmt.Println("Second factor is:", &f2)
+				fmt.Println("Verifier =", f1.Mul(&f1, &f2))
+				outdone <- struct{}{}
+				close(outdone)
+				return
+			}
 		}
 	}
 }
