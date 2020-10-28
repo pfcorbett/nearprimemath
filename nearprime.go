@@ -8,28 +8,31 @@ import (
 
 // Find the factors of a large near prime number.
 const workchunksize = 1000000
-const numworkers = 1
+const numworkers = 6
+
+var np big.Int
+var outdone chan struct{}
+var inx chan big.Int
 
 func main() {
 	// First initialize np to the value of the target near prime.  The largest of these is the RSA100 number.
-	np := new(big.Int)
 	//np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
 	//np.SetString("37479454157", 10) // ./nearprime  0.01s user 0.00s system 3% cpu 0.265 total on MBPro
-	np.SetString("17684351495169528919", 10) // ./nearprime2  125.96s user 0.08s system 99% cpu 2:06.13 total
-	//np.SetString("11148760720422040092407", 10) // ./nearprime2  768.33s user 0.54s system 100% cpu 12:48.74 total
+	//np.SetString("17684351495169528919", 10) // ./nearprime2  125.96s user 0.08s system 99% cpu 2:06.13 total
+	np.SetString("11148760720422040092407", 10) // ./nearprime2  768.33s user 0.54s system 100% cpu 12:48.74 total
 	//np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
 
 	// Now find the smallest value x such that x squared is greater than the near prime.
 	var sq, x big.Int
-	fmt.Println("Near Prime:", np)
-	x.Sqrt(np)
+	fmt.Println("Near Prime:", &np)
+	x.Sqrt(&np)
 
 	sq.Mul(&x, &x)
-	switch sq.Cmp(np) {
+	switch sq.Cmp(&np) {
 	case -1:
 		// sqrt is a floor function, convert result to ceiling
 		x.Add(&x, big.NewInt(1))
-		sq.Mul(&x, &x)
+		fmt.Println("Starting x:", &x)
 	case 0:
 		// Unlikely, but the near prime is a perfect square
 		fmt.Println("First  factor:", &x)
@@ -74,25 +77,23 @@ func main() {
 	// is O(N) iterations, as the resulting factors are N/3 and 3, which take N/3-N^^(1/2) + (N^^(1/2)-3)/2 ~= N/3 iterations to discover using this approach.
 	//
 
-	inx := make(chan big.Int, numworkers)
-	outdone := make(chan struct{})
+	inx = make(chan big.Int, numworkers)
+	outdone = make(chan struct{})
 
 	bigincr := big.NewInt(workchunksize)
 
 	for i := 0; i < numworkers; i++ {
-		go npworker(np, workchunksize, inx, outdone)
+		go npworker(workchunksize, i)
 	}
-
-	worktodo := true
-	go func() {
-		<-outdone
-		worktodo = false
-	}()
 
 	six := big.NewInt(6)
 	var t big.Int
-	for worktodo {
+	for {
+		if workdone() {
+			break
+		}
 		if np.Cmp(t.Mul(&x, six)) < 0 {
+			<-outdone
 			break
 		}
 		var y big.Int
@@ -103,22 +104,41 @@ func main() {
 	close(inx)
 }
 
-func npworker(np *big.Int, workchunk uint64, inx <-chan big.Int, outdone chan<- struct{}) {
+func workdone() bool {
+	select {
+	case <-outdone:
+		return true
+	default:
+		return false
+	}
+}
+
+func npworker(workchunk uint64, i int) {
 	one := big.NewInt(1)
 	two := big.NewInt(2)
 	four := big.NewInt(4)
 
+	drain := false
 	for x := range inx {
+		if drain {
+			continue // drain the channel
+		}
+		if workdone() {
+			break
+		}
+		//fmt.Println("x =", &x, "thread =", i)
 		var t, y, x2delta, y2delta big.Int
 
 		t.Mul(&x, &x)
-		t.Sub(&t, np)
+		t.Sub(&t, &np)
 		y.Sqrt(&t) // Floor of square root of difference x squared - N
 
 		if x.Bit(0) == 1 {
 			y.SetBit(&y, 0, 0)
 		} else {
-			y.SetBit(&y, 0, 1)
+			if y.Bit(0) == 0 {
+				y.Sub(&y, one)
+			}
 		}
 
 		x2delta.Add(&x, x2delta.Add(&x, one))
@@ -127,6 +147,7 @@ func npworker(np *big.Int, workchunk uint64, inx <-chan big.Int, outdone chan<- 
 		t.Sub(&t, &y)
 
 		var i uint64
+	loop:
 		for i = 0; i < workchunk; i++ {
 			switch t.Sign() {
 			case 1:
@@ -135,10 +156,10 @@ func npworker(np *big.Int, workchunk uint64, inx <-chan big.Int, outdone chan<- 
 				y2delta.Add(&y2delta, four)
 			case -1:
 				// Second most common case, increment both x and y by 1, preserving EO or OE relationship between them
-				x2delta.Add(&x2delta, two)
-				y2delta.Add(&y2delta, two)
 				t.Add(&t, &x2delta)
 				t.Sub(&t, &y2delta)
+				x2delta.Add(&x2delta, two)
+				y2delta.Add(&y2delta, two)
 			case 0:
 				// Eureka, we found the factors.  Reconstruct x and y, then contruct f1 and f2
 				var f1, f2 big.Int
@@ -148,12 +169,14 @@ func npworker(np *big.Int, workchunk uint64, inx <-chan big.Int, outdone chan<- 
 				y2delta.Rsh(&y2delta, 1)
 				f1.Sub(&x2delta, &y2delta)
 				f2.Add(&x2delta, &y2delta)
+				fmt.Println("x: ", &x2delta)
+				fmt.Println("y: ", &y2delta)
 				fmt.Println("First factor is:", &f1)
 				fmt.Println("Second factor is:", &f2)
 				fmt.Println("Verifier =", f1.Mul(&f1, &f2))
-				outdone <- struct{}{}
 				close(outdone)
-				return
+				drain = true
+				break loop
 			}
 		}
 	}
