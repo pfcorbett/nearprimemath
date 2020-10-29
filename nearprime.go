@@ -7,8 +7,8 @@ import (
 )
 
 // Find the factors of a large near prime number.
-const workchunksize = 1000000
-const numworkers = 6
+const workchunksize = 10000000
+const numworkers = 12 // max physical hyperthreads that can run on the 6 core 2.2GHz 2018 i7 MBP
 
 var np big.Int
 var outdone chan struct{}
@@ -18,9 +18,9 @@ func main() {
 	// First initialize np to the value of the target near prime.  The largest of these is the RSA100 number.
 	//np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
 	//np.SetString("37479454157", 10) // ./nearprime  0.01s user 0.00s system 3% cpu 0.265 total on MBPro
-	//np.SetString("17684351495169528919", 10) // ./nearprime2  125.96s user 0.08s system 99% cpu 2:06.13 total
-	np.SetString("11148760720422040092407", 10) // ./nearprime2  768.33s user 0.54s system 100% cpu 12:48.74 total
-	//np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
+	//np.SetString("17684351495169528919", 10) // ./nearprime  166.72s user 0.44s system 593% cpu 28.183 total
+	//np.SetString("11148760720422040092407", 10) // ./nearprime  1981.17s user 5.65s system 1171% cpu 2:49.64 total
+	np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
 
 	// Now find the smallest value x such that x squared is greater than the near prime.
 	var sq, x big.Int
@@ -83,7 +83,7 @@ func main() {
 	bigincr := big.NewInt(workchunksize)
 
 	for i := 0; i < numworkers; i++ {
-		go npworker(workchunksize, i)
+		go npworker(workchunksize)
 	}
 
 	six := big.NewInt(6)
@@ -113,7 +113,7 @@ func workdone() bool {
 	}
 }
 
-func npworker(workchunk uint64, i int) {
+func npworker(workchunk int64) {
 	one := big.NewInt(1)
 	two := big.NewInt(2)
 	four := big.NewInt(4)
@@ -126,7 +126,6 @@ func npworker(workchunk uint64, i int) {
 		if workdone() {
 			break
 		}
-		//fmt.Println("x =", &x, "thread =", i)
 		var t, y, x2delta, y2delta big.Int
 
 		t.Mul(&x, &x)
@@ -136,9 +135,7 @@ func npworker(workchunk uint64, i int) {
 		if x.Bit(0) == 1 {
 			y.SetBit(&y, 0, 0)
 		} else {
-			if y.Bit(0) == 0 {
-				y.Sub(&y, one)
-			}
+			y.SetBit(&y, 0, 1)
 		}
 
 		x2delta.Add(&x, x2delta.Add(&x, one))
@@ -146,13 +143,14 @@ func npworker(workchunk uint64, i int) {
 		y.Mul(&y, &y)
 		t.Sub(&t, &y)
 
-		var i uint64
+		var i int64
+		var t2 big.Int
 	loop:
-		for i = 0; i < workchunk; i++ {
+		for i = 0; i < workchunk; {
 			switch t.Sign() {
 			case 1:
 				// Normal case, need to increase y squared to (y+2) squared
-				t.Sub(t.Sub(t.Sub(&t, &y2delta), &y2delta), two)
+				t.Sub(t.Sub(&t, t2.Lsh(&y2delta, 1)), two)
 				y2delta.Add(&y2delta, four)
 			case -1:
 				// Second most common case, increment both x and y by 1, preserving EO or OE relationship between them
@@ -160,6 +158,7 @@ func npworker(workchunk uint64, i int) {
 				t.Sub(&t, &y2delta)
 				x2delta.Add(&x2delta, two)
 				y2delta.Add(&y2delta, two)
+				i++
 			case 0:
 				// Eureka, we found the factors.  Reconstruct x and y, then contruct f1 and f2
 				var f1, f2 big.Int
