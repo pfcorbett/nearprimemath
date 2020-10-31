@@ -16,11 +16,11 @@ var inx chan big.Int
 
 func main() {
 	// First initialize np to the value of the target near prime.  The largest of these is the RSA100 number.
-	//np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
+	np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
 	//np.SetString("37479454157", 10) // ./nearprime  0.01s user 0.00s system 3% cpu 0.265 total on MBPro
 	//np.SetString("17684351495169528919", 10) // ./nearprime  166.72s user 0.44s system 593% cpu 28.183 total
 	//np.SetString("11148760720422040092407", 10) // ./nearprime  1981.17s user 5.65s system 1171% cpu 2:49.64 total
-	np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
+	//np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
 
 	// Now find the smallest value x such that x squared is greater than the near prime.
 	var sq, x big.Int
