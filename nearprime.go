@@ -16,10 +16,10 @@ var inx chan big.Int
 
 func main() {
 	// First initialize np to the value of the target near prime.  The largest of these is the RSA100 number.
-	np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
+	//np.SetString("799", 10) // ./nearprime  0.00s user 0.00s system 1% cpu 0.262 total
 	//np.SetString("37479454157", 10) // ./nearprime  0.01s user 0.00s system 3% cpu 0.265 total on MBPro
 	//np.SetString("17684351495169528919", 10) // ./nearprime  166.72s user 0.44s system 593% cpu 28.183 total
-	//np.SetString("11148760720422040092407", 10) // ./nearprime  1981.17s user 5.65s system 1171% cpu 2:49.64 total
+	np.SetString("11148760720422040092407", 10) // ./nearprime  1981.17s user 5.65s system 1171% cpu 2:49.64 total
 	//np.SetString("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139", 10)
 
 	// Now find the smallest value x such that x squared is greater than the near prime.
@@ -56,8 +56,8 @@ func main() {
 	// and themselves are a simple arithmatic sequence, and then updating those values.  At the end, we directly compute x and y from x2delta and y2delta respectively.
 	// Then we compute the factors simply as x+y and x-y.
 	//
-	// The complexity of this algorithm as a function of the size of the target is linear over the range of y values checked, since each loop iteration is effectively incrementing y by either
-	// 1 or 2 (depending on whether x is also incremented in that loop iteration or not).
+	// The complexity of this algorithm as a function of the size of the target is linear over the range of y values checked, since each loop iteration is
+	// effectively incrementing y by either 1 or 2 (depending on whether x is also incremented in that loop iteration or not).
 	// To calculate a bound on runtime, first let the ratio of the two factors be k.  Since in practice the two factors are of the same order of magnitude (same number of digits)
 	// the maximum range of k < 10.  The actual k may be less than that.  We will determine the upper bound on runtime in terms of K, the maximum value of k that we expect from a
 	// solution f1*f2=N, where N is the target nearprime to be factored (np in the code).  Therefore x+y < K(x-y), i.e. x/y > (K+1)/(K-1).  x starts at r=N^^(1/2) and y essentially
@@ -143,8 +143,8 @@ func npworker(workchunk int64) {
 		y.Mul(&y, &y)
 		t.Sub(&t, &y)
 
-		var i int64
 		var t2 big.Int
+		var i int64
 	loop:
 		for i = 0; i < workchunk; {
 			switch t.Sign() {
