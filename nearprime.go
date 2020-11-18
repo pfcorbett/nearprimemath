@@ -1,3 +1,5 @@
+// Sudoku.go
+// © Peter Corbett 2020
 package main
 
 import (
