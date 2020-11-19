@@ -10,31 +10,32 @@ large as the RSA numbers).  This has been an active area of mathematics and cryp
 
 In any case, I wrote the program nearprime.go to try this approach.  The basic approach is this:
 
-We want to find x and y, x>0, x>y>=0, such that x^^2 - y^^2 = N, our target number to factor. We know that N is of the form x^^2 - y^^2, since N, being the product of
+We want to find x and y, x>y>=0, such that x^^2 - y^^2 = N, our target number to factor. We know that N is of the form x^^2 - y^^2, since N, being the product of
 two large prime numbers, is odd.  All numbers of the form x(x+1) - y(y+1) are of course even.
 
-N is known to be a near-prime, i.e. the product of two large prime numbers.  We start with x as the ceiling of N^^(1/2) (square root of N), and y = 0.  We also know
+We start with x as the ceiling of N^^(1/2) (square root of N), and y = 0.  We also know
 that when x is even, y is odd, and vice versa to produce an odd result.  Our approach is to increment x, set y to the next value so that x,y are E,O or O,E.  
 Test if x^^2 - y^^2 == N.  Then advance y by two until the difference x^^2 - y^^2 is less than N.  Then advance x and y both by 1, which makes the error
 positive again, and repeat by incrementing y.
 
 Now, we optimize in a couple of ways.  We first note that for any x and y, x^^2 - y^^2 = N + e, where e is the "error".  Rearranging, x^^2 - y^^2 - N = e.  We can
 initialize x and y as above and compute an initial error value e.  We are then going to iterate until we find an x y combination that yields e == 0.
-This assists the performance as the math/big package uses a variable length slice []uint64 to store the magnitude (abs) of the number.  Keeping the math close to zero
-will ensure that we are doing fewer operations in each math step.
+This assists the performance as the math/big package uses a variable length []uint64 slice to store the magnitude (abs) of the number.  Keeping the math 
+close to zero will ensure that we are doing fewer operations in each math step.
 
-Second, we note that we do not need to compute the squares each time.  Since a sequence of squares is easily calculated as a sum, we can easily determine the change
-in e as x and y are incremented simply by adding and subtracting appropriately increasing values of x2delta (x squared delta) and y2delta (...).
+Second, we note that we do not need to compute the squares each time.  Since a sequence of squares is easily calculated as a sum (1 + 3 + 5...), we can easily determine the change
+in e as x and y are incremented simply by adding and subtracting appropriately increasing values of x2delta (x squared delta) and y2delta (...) to e.
 
-The algorithm concludes when we find the right x and y that yields e==0.  In fact, I discover the x2delta and y2delta that yields e==0.  Then I convert those to the 
-correct values of x and y.  Finally, the two factors are f1 = x-y and f2 = x+y.  In a final step, I multiply f1 x f2, and compare it to N as a verification check.
+The algorithm concludes when we find the right x and y that yields e==0.  In fact, I first discover the x2delta and y2delta values at the point where e==0.  Then I convert those to the 
+corresponding final values of x and y.  Finally, the two factors are f1 = x-y and f2 = x+y.  In a final step, I multiply f1 x f2, and compare it to N as a check.
 
 A third optimization in runtime is achieved by parallelizing the algorithm.  The approach I took here was to divide the search space into buckets, and partition
 the buckets to twelve different threads to take advantage of the multithreading possible on my laptop, a 2018 MacBook Pro with 6 2.3GHz cores, each of which
 supports two hyperthreads.
 
 Let's see what we expect the runtime bounds to be.  Let the two factors be f1, f2 such that f1 <= f2.  Let's also assume that f2/f1 <= K, i.e. the two factors
-are within a multiple of K of each other.  In practice, the challenge numbers have factors of the same decimal order of magnitude, therefore K = 10.
+are within a multiple of K of each other.  In practice, it appears to be true that the challenge numbers have factors of the same decimal order of magnitude (this makes them resistant to factoring by naive techniques such as dividing them by all prime numbers in sequence), therefore K = 10.
+
 Now: 
   f2/f1 = (x+y)/(x-y) <= K
   x >= (K+1)y / (K-1)
